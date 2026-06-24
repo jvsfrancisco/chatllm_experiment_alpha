@@ -58,17 +58,52 @@ async function apiMe() {
   return data;
 }
 
-async function sendMessageStream({ message, history, onDelta, signal }) {
+async function apiListSessions() {
+  const res = await fetch(`${API_BASE}/api/sessions`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function apiCreateSession() {
+  const res = await fetch(`${API_BASE}/api/sessions`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Erro ao criar sessao");
+  return res.json();
+}
+
+async function apiDeleteSession(sessionId) {
+  await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+}
+
+async function apiListMessages(sessionId) {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function sendMessageStream({ message, history, sessionId, onDelta, onSessionId, signal }) {
+  const body = { message, history };
+  if (sessionId) body.session_id = sessionId;
+
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify(body),
     signal,
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const detail = body?.detail || "Erro ao enviar mensagem para o servidor.";
+    const bodyErr = await response.json().catch(() => ({}));
+    const detail = bodyErr?.detail || "Erro ao enviar mensagem para o servidor.";
     throw new Error(detail);
   }
 
@@ -106,6 +141,10 @@ async function sendMessageStream({ message, history, onDelta, signal }) {
 
       if (payload.error) {
         throw new Error(payload.error);
+      }
+
+      if (payload.session_id && onSessionId) {
+        onSessionId(payload.session_id);
       }
 
       if (payload.delta) {
